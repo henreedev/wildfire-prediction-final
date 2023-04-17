@@ -5,7 +5,7 @@ from matplotlib import colors
 
 import tensorflow as tf
 
-file_pattern = '/kaggle/input/next-day-wildfire-spread/next_day_wildfire_spread_train*'
+file_pattern = '../data/next_day_wildfire_spread_train*'
 
 """Constants for the data reader."""
 
@@ -325,8 +325,66 @@ def get_dataset(file_pattern: Text, data_size: int, sample_size: int,
   return dataset
 
 
+
 def main():
-    return get_dataset()
+    side_length = 32 #length of the side of the square you select (so, e.g. pick 64 if you don't want any random cropping)
+    num_obs = 100 #batch size
+
+    dataset = get_dataset(
+      file_pattern,
+      data_size=64,
+      sample_size=side_length,
+      batch_size=num_obs,
+      num_in_channels=12,
+      compression_type=None,
+      clip_and_normalize=False,
+      clip_and_rescale=False,
+      random_crop=True,
+      center_crop=False)
+    print("dataset = ", dataset)
+    inputs, labels = next(iter(dataset))
+
+    TITLES = [
+    'Elevation',
+    'Wind\ndirection',
+    'Wind\nvelocity',
+    'Min\ntemp',
+    'Max\ntemp',
+    'Humidity',
+    'Precip',
+    'Drought',
+    'Vegetation',
+    'Population\ndensity',
+    'Energy\nrelease\ncomponent',
+    'Previous\nfire\nmask',
+    'Fire\nmask']
+    
+    # Number of rows of data samples to plot
+    n_rows = 5 
+    # Number of data variables
+    n_features = inputs.shape[3]
+    # Variables for controllong the color map for the fire masks
+    CMAP = colors.ListedColormap(['black', 'silver', 'orangered'])
+    BOUNDS = [-1, -0.1, 0.001, 1]
+    NORM = colors.BoundaryNorm(BOUNDS, CMAP.N)
+
+    fig = plt.figure(figsize=(15,6.5))
+
+    for i in range(n_rows):
+      for j in range(n_features + 1):
+        plt.subplot(n_rows, n_features + 1, i * (n_features + 1) + j + 1)
+        if i == 0:
+          plt.title(TITLES[j], fontsize=13)
+        if j < n_features - 1:
+          plt.imshow(inputs[i, :, :, j], cmap='viridis')
+        if j == n_features - 1:
+          plt.imshow(inputs[i, :, :, -1], cmap=CMAP, norm=NORM)
+        if j == n_features:
+          plt.imshow(labels[i, :, :, 0], cmap=CMAP, norm=NORM) 
+        plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+    return dataset
 
 
 if __name__ == '__main__':
