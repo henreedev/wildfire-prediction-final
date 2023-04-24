@@ -6,12 +6,12 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, input_shape):
+    def __init__(self):
         super(Encoder, self).__init__()
-        self.conv2D1 = tf.keras.layers.Conv2D(32, 3, activation='relu', padding='same', input_shape=input_shape)
+        self.conv2D1 = tf.keras.layers.Conv2D(64, 3, activation='relu', padding='same')
         self.bnorm = tf.keras.layers.BatchNormalization()
-        self.dropout = tf.keras.layers.Dropout(0.1)
-        self.conv2D2 = tf.keras.layers.Conv2D(32, 3, activation='relu', padding='same')
+        self.dropout = tf.keras.layers.Dropout(0.5)
+        self.conv2D2 = tf.keras.layers.Conv2D(64, 3, activation='relu', padding='same')
 
 
     def call(self, x):
@@ -31,14 +31,16 @@ class Encoder(tf.keras.layers.Layer):
         return x
 
 class ResidualBlock(tf.keras.layers.Layer):
-    def __init__(self, is_conv2d):
+    def __init__(self, is_conv2d, num_filters=64):
         super(ResidualBlock, self).__init__()
-        self.conv2D = tf.keras.layers.Conv2D(32, 3, activation='relu', padding='same')
+        self.num_filters = num_filters
+        self.conv2D = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
         self.bnorm = tf.keras.layers.BatchNormalization()
         self.dropout = tf.keras.layers.Dropout(0.1)
         self.maxpool = tf.keras.layers.MaxPooling2D(2)
         self.leaky = tf.keras.layers.LeakyReLU(alpha=0.1)
         self.is_conv2d = is_conv2d
+        
 
     def call(self, x):
         # Define the forward pass of the residual block
@@ -135,16 +137,17 @@ def get_model(input_shape):
 
     model = tf.keras.Sequential([
         # Down-sampling blocks
-        Encoder(input_shape),
+        Encoder(),
         # Residual blocks
-        ResidualBlock(False),
-        ResidualBlock(False),
+        ResidualBlock(False, 64),
+        ResidualBlock(False, 64),
         tf.keras.layers.UpSampling2D(2),
-        ResidualBlock(True),
+        ResidualBlock(True, 64),
         tf.keras.layers.UpSampling2D(2),
-        ResidualBlock(True),
-        tf.keras.layers.Conv2D(32, 3, activation='relu', padding='same'),
-        tf.keras.layers.Conv2D(1, 1, activation='sigmoid')
+        ResidualBlock(True, 64),
+        tf.keras.layers.Conv2D(64, 3, activation='relu', padding='same'),
+        # loss function takes in logits so use appropriate activation
+        tf.keras.layers.Conv2D(1, 1, activation='sigmoid', padding='same')
         ])
     return model
 
@@ -158,22 +161,51 @@ def main():
     file_pattern = '../data/next_day_wildfire_spread_train*'
     import preprocess
     side_length = 32 #length of the side of the square you select (so, e.g. pick 64 if you don't want any random cropping)
-    num_obs = 1000 #batch size
-    data = preprocess.get_dataset(
+    train_num_obs = 1000 #batch size
+    train_data = preprocess.get_dataset(
       file_pattern,
       data_size=64,
       sample_size=side_length,
-      batch_size=num_obs,
+      batch_size=train_num_obs,
       num_in_channels=12,
       compression_type=None,
       clip_and_normalize=True,
       clip_and_rescale=False,
       random_crop=True,
       center_crop=False)
-    inputs, labels = next(iter(data))
+    inputs, labels = next(iter(train_data))
 
+    val_num_obs = 1000 #batch size
+    val_file_pattern = '../data/next_day_wildfire_spread_eval*'
+    val_data = preprocess.get_dataset(
+      val_file_pattern,
+      data_size=64,
+      sample_size=side_length,
+      batch_size=val_num_obs,
+      num_in_channels=12,
+      compression_type=None,
+      clip_and_normalize=True,
+      clip_and_rescale=False,
+      random_crop=True,
+      center_crop=False)
+    val_inputs, val_labels = next(iter(val_data))
+
+    test_num_obs = 1000 #batch size
+    test_file_pattern = '../data/next_day_wildfire_spread_test*'
+    test_data = preprocess.get_dataset(
+        test_file_pattern,
+        data_size=64,
+        sample_size=side_length,
+        batch_size=test_num_obs,
+        num_in_channels=12,
+        compression_type=None,
+        clip_and_normalize=True,
+        clip_and_rescale=False,
+        random_crop=True,
+        center_crop=False)
+    test_inputs, test_labels = next(iter(test_data))
     num_batches = 50
-    batch_size = num_obs // num_batches
+    train_batch_size = train_num_obs // num_batches
 
 
     print(inputs.shape)
@@ -182,7 +214,7 @@ def main():
     # fit the sequential model
     model = get_model(inputs.shape[1:])
     # compile model with weighted cross entropy loss
-    class_weights = tf.constant([1.0, 2.0])
+    class_weights = tf.constant(2)
 
     # Create the loss function
     def weighted_cross_entropy_with_logits(y_true, y_pred):
@@ -194,8 +226,9 @@ def main():
     print(model.summary())
 
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=weighted_cross_entropy_with_logits, metrics=[auc])
-    model.fit(inputs, labels, epochs=10, batch_size=batch_size)
-
+    model.fit(inputs, labels, epochs=5, batch_size=train_batch_size, validation_data=(val_inputs, val_labels), )
+    results = model.evaluate(test_inputs, test_labels, batch_size=train_batch_size)
+    print("test loss, test acc:", results)
 
 if __name__ == '__main__':
     main()
