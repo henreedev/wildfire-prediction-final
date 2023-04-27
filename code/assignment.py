@@ -8,25 +8,34 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 class Encoder(tf.keras.layers.Layer):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.conv2D1 = tf.keras.layers.Conv2D(64, 3, activation='relu', padding='same')
-        self.bnorm = tf.keras.layers.BatchNormalization()
-        self.dropout = tf.keras.layers.Dropout(0.5)
-        self.conv2D2 = tf.keras.layers.Conv2D(64, 3, activation='relu', padding='same')
+        # make all of these different for each specific layer!
+        # all conv layers should have 16 layers, except for resnet
+        self.conv2D1 = tf.keras.layers.Conv2D(16, 3, activation='relu', padding='same')
+        self.conv2D2 = tf.keras.layers.Conv2D(16, 3, activation='relu', padding='same')
+        self.conv2D3 = tf.keras.layers.Conv2D(16, 3, activation='relu', padding='same')
+
+        self.bnorm1 = tf.keras.layers.BatchNormalization()
+        self.bnorm2 = tf.keras.layers.BatchNormalization()
+        self.bnorm3 = tf.keras.layers.BatchNormalization()
+
+        self.dropout1 = tf.keras.layers.Dropout(0.5)
+        self.dropout2 = tf.keras.layers.Dropout(0.5)
+        
 
 
-    def call(self, x):
+    def call(self, x, training = False):
         # Define the forward pass of the residual block
         residual = x
         residual = self.conv2D1(residual)
-        residual = self.bnorm(residual)
-        residual = self.dropout(residual)
+        residual = self.bnorm1(residual, training=training)
+        residual = self.dropout1(residual, training=training)
         
         body = x
         body = self.conv2D1(body)
-        body = self.bnorm(body)
-        body = self.dropout(body)
-        body = self.conv2D2(body)
-        body = self.bnorm(body)
+        body = self.bnorm2(body, training=training)
+        body = self.dropout2(body, training=training)
+        body = self.conv2D3(body)
+        body = self.bnorm3(body, training=training)
         x = tf.keras.layers.add([body, residual])
         return x
 
@@ -34,37 +43,49 @@ class ResidualBlock(tf.keras.layers.Layer):
     def __init__(self, is_conv2d, num_filters=64):
         super(ResidualBlock, self).__init__()
         self.num_filters = num_filters
-        self.conv2D = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
-        self.bnorm = tf.keras.layers.BatchNormalization()
-        self.dropout = tf.keras.layers.Dropout(0.1)
-        self.maxpool = tf.keras.layers.MaxPooling2D(2)
+
+        self.conv2D1 = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
+        self.conv2D2 = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
+        self.conv2D3 = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
+
+        self.bnorm1 = tf.keras.layers.BatchNormalization()
+        self.bnorm2 = tf.keras.layers.BatchNormalization()
+        self.bnorm3 = tf.keras.layers.BatchNormalization()
+
+        self.dropout1 = tf.keras.layers.Dropout(0.1)
+        self.dropout2 = tf.keras.layers.Dropout(0.1)
+        self.dropout3 = tf.keras.layers.Dropout(0.1)
+        self.dropout4 = tf.keras.layers.Dropout(0.1)
+
+        self.maxpool1 = tf.keras.layers.MaxPooling2D(2)
+        self.maxpool2 = tf.keras.layers.MaxPooling2D(2)
         self.leaky = tf.keras.layers.LeakyReLU(alpha=0.1)
         self.is_conv2d = is_conv2d
         
 
-    def call(self, x):
+    def call(self, x, training = False):
         # Define the forward pass of the residual block
         residual = x
-        residual = self.conv2D(residual)
+        residual = self.conv2D1(residual)
         if not self.is_conv2d:
-            residual = self.maxpool(residual)
-        residual = self.bnorm(residual)
-        residual = self.dropout(residual)
+            residual = self.maxpool1(residual, training=training)
+        residual = self.bnorm1(residual, training=training)
+        residual = self.dropout1(residual, training=training)
         
         body = x
         # leaky relu on body
         body = self.leaky(body)
-        body = self.dropout(body)
+        body = self.dropout2(body, training=training)
         if self.is_conv2d:
-            body = self.conv2D(body)
-            body = self.bnorm(body)
+            body = self.conv2D2(body)
+            body = self.bnorm2(body, training=training)
         else:
-            body = self.maxpool(body)
+            body = self.maxpool2(body, training=training)
         body = self.leaky(body)
-        body = self.dropout(body)
-        body = self.conv2D(body)
-        body = self.bnorm(body)
-        body = self.dropout(body)
+        body = self.dropout3(body, training=training)
+        body = self.conv2D3(body)
+        body = self.bnorm3(body, training=training)
+        body = self.dropout4(body, training=training)
         x = tf.keras.layers.add([body, residual])
         return x
 
@@ -139,15 +160,14 @@ def get_model(input_shape):
         # Down-sampling blocks
         Encoder(),
         # Residual blocks
-        ResidualBlock(False, 64),
-        ResidualBlock(False, 64),
+        ResidualBlock(False, 32),
+        ResidualBlock(False, 32),
         tf.keras.layers.UpSampling2D(2),
-        ResidualBlock(True, 64),
+        ResidualBlock(True, 32),
         tf.keras.layers.UpSampling2D(2),
-        ResidualBlock(True, 64),
-        tf.keras.layers.Conv2D(64, 3, activation='relu', padding='same'),
-        # loss function takes in logits so use appropriate activation
-        tf.keras.layers.Conv2D(1, 1, activation='sigmoid', padding='same')
+        ResidualBlock(True, 32),
+        # delete this layer below but maybe keep sigmoid
+        tf.keras.layers.Conv2D(1, 3, activation='sigmoid', padding='same')
         ])
     return model
 
@@ -214,13 +234,14 @@ def main():
     # fit the sequential model
     model = get_model(inputs.shape[1:])
     # compile model with weighted cross entropy loss
-    class_weights = tf.constant(2)
+    class_weights = tf.constant(3.0)
 
     # Create the loss function
     def weighted_cross_entropy_with_logits(y_true, y_pred):
         return tf.nn.weighted_cross_entropy_with_logits(labels=y_true, logits=y_pred, pos_weight=class_weights)
     
-    # add an AUC pr metric
+    # add an AUC pr metric: MAYBE change to per pixel loss
+    # l1, l2 regularization
     auc = tf.keras.metrics.AUC(curve='PR')
     model.build(inputs.shape)
     print(model.summary())
