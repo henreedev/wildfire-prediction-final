@@ -3,6 +3,7 @@ import numpy as np
 from preprocess import get_dataset
 from types import SimpleNamespace
 import os
+import matplotlib.pyplot as plt
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 class Encoder(tf.keras.layers.Layer):
@@ -242,14 +243,19 @@ def main():
     
     # add an AUC pr metric: MAYBE change to per pixel loss
     # l1, l2 regularization
+    
     auc = tf.keras.metrics.AUC(curve='PR')
     model.build(inputs.shape)
     print(model.summary())
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=weighted_cross_entropy_with_logits, metrics=[auc])
-    model.fit(inputs, labels, epochs=5, batch_size=train_batch_size, validation_data=(val_inputs, val_labels), )
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=weighted_cross_entropy_with_logits, metrics=["accuracy"])
+    model.fit(inputs, labels, epochs=10, batch_size=train_batch_size, validation_data=(val_inputs, val_labels), )
     results = model.evaluate(test_inputs, test_labels, batch_size=train_batch_size)
-    print("test loss, test acc:", results)
+    # make a prediction and evaluate it
+    model.predict(test_inputs, batch_size=train_batch_size)
+    fig = plt.figure(figsize=(10, 10))
+    plt.imshow(test_inputs[0, :, :, 0])
+    plt.show()
 
 if __name__ == '__main__':
     main()
