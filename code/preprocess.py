@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 import tensorflow as tf
-
+# ==============================================================================
+# ADAPTED FROM KAGGLE LINK
+# ==============================================================================
 file_pattern = '../data/next_day_wildfire_spread_train*'
 
 """Constants for the data reader."""

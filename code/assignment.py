@@ -4,6 +4,8 @@ from preprocess import get_dataset
 from types import SimpleNamespace
 import os
 import matplotlib.pyplot as plt
+from matplotlib import colors
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 class Encoder(tf.keras.layers.Layer):
@@ -11,16 +13,16 @@ class Encoder(tf.keras.layers.Layer):
         super(Encoder, self).__init__()
         # make all of these different for each specific layer!
         # all conv layers should have 16 layers, except for resnet
-        self.conv2D1 = tf.keras.layers.Conv2D(16, 3, activation='relu', padding='same')
-        self.conv2D2 = tf.keras.layers.Conv2D(16, 3, activation='relu', padding='same')
-        self.conv2D3 = tf.keras.layers.Conv2D(16, 3, activation='relu', padding='same')
+        self.conv2D1 = tf.keras.layers.Conv2D(16, 3, padding='same')
+        self.conv2D2 = tf.keras.layers.Conv2D(16, 3, padding='same')
+        self.conv2D3 = tf.keras.layers.Conv2D(16, 3, padding='same')
 
         self.bnorm1 = tf.keras.layers.BatchNormalization()
         self.bnorm2 = tf.keras.layers.BatchNormalization()
         self.bnorm3 = tf.keras.layers.BatchNormalization()
 
-        self.dropout1 = tf.keras.layers.Dropout(0.5)
-        self.dropout2 = tf.keras.layers.Dropout(0.5)
+        self.dropout1 = tf.keras.layers.Dropout(0.1)
+        self.dropout2 = tf.keras.layers.Dropout(0.1)
         
 
 
@@ -45,9 +47,9 @@ class ResidualBlock(tf.keras.layers.Layer):
         super(ResidualBlock, self).__init__()
         self.num_filters = num_filters
 
-        self.conv2D1 = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
-        self.conv2D2 = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
-        self.conv2D3 = tf.keras.layers.Conv2D(num_filters, 3, activation='relu', padding='same')
+        self.conv2D1 = tf.keras.layers.Conv2D(num_filters, 3, padding='same')
+        self.conv2D2 = tf.keras.layers.Conv2D(num_filters, 3, padding='same')
+        self.conv2D3 = tf.keras.layers.Conv2D(num_filters, 3, padding='same')
 
         self.bnorm1 = tf.keras.layers.BatchNormalization()
         self.bnorm2 = tf.keras.layers.BatchNormalization()
@@ -91,68 +93,6 @@ class ResidualBlock(tf.keras.layers.Layer):
         return x
 
 
-# class MyTrigram(tf.keras.Model):
-
-#     def __init__(self, vocab_size, hidden_size=100, embed_size=64):
-#         """
-#         The Model class predicts the next words in a sequence.
-#         : param vocab_size : The number of unique words in the data
-#         : param hidden_size   : The size of your desired RNN
-#         : param embed_size : The size of your latent embedding
-#         """
-
-#         super().__init__()
-
-#         self.vocab_size = vocab_size
-#         self.embed_size = embed_size
-#         self.hidden_size = hidden_size
-
-#         ## TODO: define your trainable variables and/or layers here. This should include an
-#         ## embedding component, and any other variables/layers you require.
-#         ## HINT: You may want to use tf.keras.layers.Embedding
-#         self.embedding = tf.keras.layers.Embedding(vocab_size, embed_size)
-#         self.dense1 = tf.keras.layers.Dense(hidden_size, activation='relu')
-#         self.dense2 = tf.keras.layers.Dense(vocab_size, activation='softmax')
-#         self.flatten = tf.keras.layers.Flatten()
-
-        
-
-
-#     def call(self, inputs):
-#         """
-#         You must use an embedding layer as the first layer of your network (i.e. tf.nn.embedding_lookup or tf.keras.layers.Embedding)
-#         :param inputs: word ids of shape (batch_size, 2)
-#         :return: logits: The batch element probabilities as a tensor of shape (batch_size, vocab_size)
-#         """
-#         inputs = self.embedding(inputs)
-#         inputs = self.flatten(inputs)
-#         inputs = self.dense1(inputs)
-#         inputs = self.dense2(inputs)
-
-
-#         return inputs
-
-#     def generate_sentence(self, word1, word2, length, vocab):
-#         """
-#         Given initial 2 words, print out predicted sentence of targeted length.
-#         (NOTE: you shouldn't need to make any changes to this function).
-#         :param word1: string, first word
-#         :param word2: string, second word
-#         :param length: int, desired sentence length
-#         :param vocab: dictionary, word to id mapping
-#         """
-#         reverse_vocab = {idx: word for word, idx in vocab.items()}
-#         output_string = np.zeros((1, length), dtype=np.int32)
-#         output_string[:, :2] = vocab[word1], vocab[word2]
-
-#         for end in range(2, length):
-#             start = end - 2
-#             output_string[:, end] = np.argmax(self(output_string[:, start:end]), axis=1)
-#         text = [reverse_vocab[i] for i in list(output_string[0])]
-
-#         print(" ".join(text))
-
-
 #########################################################################################
 
 def get_model(input_shape):
@@ -182,7 +122,7 @@ def main():
     file_pattern = '../data/next_day_wildfire_spread_train*'
     import preprocess
     side_length = 32 #length of the side of the square you select (so, e.g. pick 64 if you don't want any random cropping)
-    train_num_obs = 1000 #batch size
+    train_num_obs = 5000 #batch size
     train_data = preprocess.get_dataset(
       file_pattern,
       data_size=64,
@@ -195,6 +135,9 @@ def main():
       random_crop=True,
       center_crop=False)
     inputs, labels = next(iter(train_data))
+    # get only prev fire mask from inputs which is the last column
+
+
 
     val_num_obs = 1000 #batch size
     val_file_pattern = '../data/next_day_wildfire_spread_eval*'
@@ -210,6 +153,8 @@ def main():
       random_crop=True,
       center_crop=False)
     val_inputs, val_labels = next(iter(val_data))
+    # get only prev fire mask from inputs which is the last column
+
 
     test_num_obs = 1000 #batch size
     test_file_pattern = '../data/next_day_wildfire_spread_test*'
@@ -225,17 +170,43 @@ def main():
         random_crop=True,
         center_crop=False)
     test_inputs, test_labels = next(iter(test_data))
-    num_batches = 50
-    train_batch_size = train_num_obs // num_batches
+    # get only prev fire mask from inputs which is the last column
+
+    train_batch_size = 128
+    num_batches = train_num_obs // train_batch_size
+
 
 
     print(inputs.shape)
     print(labels.shape)
+    n_rows = 5 
+    # Number of data variables
+    n_features = 12
+    # Variables for controllong the color map for the fire masks
+    CMAP = colors.ListedColormap(['black', 'silver', 'orangered'])
+    BOUNDS = [-1, -0.1, 0.003, 1]
+    NORM = colors.BoundaryNorm(BOUNDS, CMAP.N)
+    TITLES = [
+    'Elevation',
+    'Wind\ndirection',
+    'Wind\nvelocity',
+    'Min\ntemp',
+    'Max\ntemp',
+    'Humidity',
+    'Precip',
+    'Drought',
+    'Vegetation',
+    'Population\ndensity',
+    'Energy\nrelease\ncomponent',
+    'Previous\nfire\nmask',
+    'Fire\nmask']
+
+    
 
     # fit the sequential model
     model = get_model(inputs.shape[1:])
     # compile model with weighted cross entropy loss
-    class_weights = tf.constant(3.0)
+    class_weights = tf.constant(20.0)
 
     # Create the loss function
     def weighted_cross_entropy_with_logits(y_true, y_pred):
@@ -247,14 +218,30 @@ def main():
     auc = tf.keras.metrics.AUC(curve='PR')
     model.build(inputs.shape)
     print(model.summary())
-
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=weighted_cross_entropy_with_logits, metrics=["accuracy"])
-    model.fit(inputs, labels, epochs=10, batch_size=train_batch_size, validation_data=(val_inputs, val_labels), )
-    results = model.evaluate(test_inputs, test_labels, batch_size=train_batch_size)
+    print(labels.shape)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=weighted_cross_entropy_with_logits, metrics=[auc])
+    model.fit(inputs, labels, epochs=100, batch_size=train_batch_size, validation_data=(val_inputs, val_labels), )
+    # evaluate the model
+    loss, acc = model.evaluate(test_inputs, test_labels, verbose=0)
+    print('Test Accuracy: %.3f' % acc)
+    print('Test Loss: %.3f' % loss)
+    labels = model.predict(test_inputs, batch_size=train_batch_size)
+    print(np.shape(labels))
+    inputs = test_inputs
     # make a prediction and evaluate it
-    model.predict(test_inputs, batch_size=train_batch_size)
-    fig = plt.figure(figsize=(10, 10))
-    plt.imshow(test_inputs[0, :, :, 0])
+    for i in range(n_rows):
+      for j in range(n_features + 1):
+        plt.subplot(n_rows, n_features + 1, i * (n_features + 1) + j + 1)
+        if i == 0:
+          plt.title(TITLES[j], fontsize=13)
+        if j < n_features - 1:
+          plt.imshow(inputs[i, :, :, j], cmap='viridis')
+        if j == n_features - 1:
+          plt.imshow(inputs[i, :, :, -1], cmap=CMAP, norm=NORM)
+        if j == n_features:
+          plt.imshow(labels[i, :, :, 0], cmap=CMAP, norm=NORM) 
+        plt.axis('off')
+    plt.tight_layout()
     plt.show()
 
 if __name__ == '__main__':
